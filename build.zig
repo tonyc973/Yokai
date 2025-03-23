@@ -37,6 +37,7 @@ fn build_repl(
 
     const repl_files = .{
         "main.cpp",
+        "../common/connection.cpp",
     };
     exe.addCSourceFiles(.{
         .root = b.path("repl"),
@@ -72,6 +73,7 @@ fn build_daemon(
 
     const daemon_files = .{
         "main.cpp",
+        "../common/connection.cpp",
     };
     exe.addCSourceFiles(.{
         .root = b.path("daemon"),

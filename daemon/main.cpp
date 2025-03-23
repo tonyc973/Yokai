@@ -1,10 +1,7 @@
-#include <cstring>
-#include <iostream>
 #include <thread>
 #include <print>
-#include <netinet/in.h>
-#include <unistd.h>
-#include <sys/socket.h>
+
+#include "../common/include/connection.h"
 
 void handle_client(int client) {
     constexpr int BUFF_SIZE = 1024;
@@ -27,53 +24,27 @@ void handle_client(int client) {
 }
 
 int main() {
-    int server_fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (server_fd == -1) {
-        std::cerr << "[ERROR]: Unable to create socket" << std::endl;
-        close(server_fd);
+    constexpr int32_t PORT = 8080;
+    constexpr int32_t NUM_CLIENTS = 3;
+
+    Connection conn(PORT);
+    std::optional<std::error_code> err = conn.init_server(NUM_CLIENTS);
+    if (err != std::nullopt) {
+        std::cerr << err.value().message() << std::endl;
         return 1;
     }
 
-    constexpr int opt = 1;
-    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt))) {
-        std::cerr << "[ERROR]: Setting socket opt failed" << std::endl;
-        close(server_fd);
-        return 1;
-    }
-
-    constexpr int PORT = 8080;
-    struct sockaddr_in address;
-    address.sin_family = AF_INET;
-    address.sin_addr.s_addr = INADDR_ANY;
-    address.sin_port = htons(PORT);
-
-    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
-        std::cerr << "[ERROR]: Binding failed" << std::endl;
-        close(server_fd);
-        return 1;
-    }
-
-    constexpr int NUM_CLIENTS = 3;
-    if (listen(server_fd, NUM_CLIENTS) < 0) {
-        std::cerr << "[ERROR]: Servern couldn't listen" << std::endl;
-        close(server_fd);
-        return 1;
-    }
-
-    constexpr int addrlen = sizeof(address);
     bool running = true;
     std::println("Listenting for connections on port :{}", PORT);
     while (running) {
-        int client = accept(server_fd, (struct sockaddr *)&address, (socklen_t *)&addrlen);
-        if (client < 0) {
-            std::cerr << "[ERROR]: Couldn't accept client" << std::endl;
-            continue;
-            return 1;
+        auto client_fd = conn.accept_conn();
+        if (!client_fd.has_value()) {
+            std::cerr << client_fd.error().message() << std::endl;
         }
 
-        std::thread client_thread(handle_client, client);
+        std::thread client_thread(handle_client, client_fd.value());
         client_thread.detach();
+
     }
-    close(server_fd);
     return 0;
 }

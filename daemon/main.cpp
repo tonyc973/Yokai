@@ -1,15 +1,23 @@
+#include <string.h>
+
 #include <print>
 #include <thread>
+#include <vector>
 
 #include "../common/include/connection.h"
+#include "include/database.h"
+#include "include/list_database.h"
+#include "include/transaction.h"
 
-void handle_client(int client) {
+void handle_client(int client, ListDatabase* db) {
     constexpr int BUFF_SIZE = 1024;
     char buff[BUFF_SIZE];
+    Transaction* user_transaction = new Transaction(db);
+
     while (true) {
         memset(buff, 0, BUFF_SIZE);
         ssize_t bytes_read = read(client, buff, BUFF_SIZE);
-        std::println("[DBG]: Number of bytes read = {}", bytes_read);
+        std::println("\n[DBG]: Number of bytes read = {}", bytes_read);
         if (bytes_read <= 0) {
             if (bytes_read == 0) {
                 std::println("[INFO]: Client '{}' disconnected!", client);
@@ -21,12 +29,16 @@ void handle_client(int client) {
             break;
         }
         std::println("Message from client: {}", buff);
+
+        user_transaction->handle_command(buff);
     }
 
     close(client);
 }
 
 int main() {
+    ListDatabase* db = new ListDatabase();
+
     constexpr int32_t PORT = 8080;
     constexpr int32_t NUM_CLIENTS = 3;
 
@@ -45,7 +57,7 @@ int main() {
             std::cerr << client_fd.error().message() << std::endl;
         }
 
-        std::thread client_thread(handle_client, client_fd.value());
+        std::thread client_thread(handle_client, client_fd.value(), db);
         client_thread.detach();
     }
     return 0;

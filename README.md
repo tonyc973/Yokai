@@ -61,4 +61,6 @@ shared behaviour for both `REPL` and `DAEMON`.
 
 ## Slides
 https://docs.google.com/presentation/d/1MolV8aGjcaotN-5taekOP0o-n_RqiLxm0NtCeDrRl1U/edit?slide=id.p#slide=id.p
-#
+
+## References
+- https://www.postgresql.org/docs/7.1/mvcc.html

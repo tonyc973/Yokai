@@ -6,6 +6,6 @@ As a user I want to:
 5.  Select from the database
 6.  Insert to the database
 7.  Update the database
-8.  Undo last command
+8.  Undo database commits (rollback)
 9.  Create tables
 10. Backup the database

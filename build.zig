@@ -1,4 +1,5 @@
 const std = @import("std");
+const Compile = std.Build.Step.Compile;
 const OptimizeMode = std.builtin.OptimizeMode;
 const ResolvedTarget = std.Build.ResolvedTarget;
 
@@ -10,88 +11,153 @@ const CXX_FLAGS = .{
     "-Wextra",
 };
 
-pub fn build(b: *std.Build) void {
+pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    build_repl(b, target, optimize);
-    build_daemon(b, target, optimize);
-    build_tests(b, target, optimize);
-    format_code(b);
-    // build_docs(b, target, optimize);
+    const check_opt = b.option(bool, "check_format", "Check if project is formatted correctly") orelse false;
+    format_code(b, check_opt);
+    build_docs(b);
+
+    const check_release = b.option(bool, "release", "Run release build") orelse false;
+    if (check_release) {
+        try build_release(b);
+    } else {
+        _ = build_repl(b, target, optimize, false);
+        _ = build_daemon(b, target, optimize, false);
+        build_tests(b, target, optimize);
+    }
 }
+
+fn build_release(b: *std.Build) !void {
+    const targets: []const std.Target.Query = &.{
+        .{ .cpu_arch = .aarch64, .os_tag = .linux },
+        .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .gnu },
+        .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .musl },
+    };
+
+    for (targets) |t| {
+        const repl_exe = build_repl(b, b.resolveTargetQuery(t), .ReleaseSafe, true);
+        const daemon_exe = build_daemon(b, b.resolveTargetQuery(t), .ReleaseSafe, true);
+
+        const target_output_repl = b.addInstallArtifact(repl_exe, .{
+            .dest_dir = .{
+                .override = .{
+                    .custom = try t.zigTriple(b.allocator),
+                },
+            },
+        });
+
+        const target_output_daemon = b.addInstallArtifact(daemon_exe, .{
+            .dest_dir = .{
+                .override = .{
+                    .custom = try t.zigTriple(b.allocator),
+                },
+            },
+        });
+
+        b.getInstallStep().dependOn(&target_output_repl.step);
+        b.getInstallStep().dependOn(&target_output_daemon.step);
+    }
+}
+
+const repl_files = .{
+    "repl/main.cpp",
+    "common/connection.cpp",
+};
 
 fn build_repl(
     b: *std.Build,
     target: ResolvedTarget,
     optimize: OptimizeMode,
-) void {
+    release: bool,
+) *Compile {
     const exe = b.addExecutable(.{
         .name = "yokai-repl",
         .target = target,
         .optimize = optimize,
-        .use_llvm = false,
     });
 
     exe.linkLibCpp();
 
-    const repl_files = .{
-        "main.cpp",
-        "../common/connection.cpp",
-    };
     exe.addCSourceFiles(.{
-        .root = b.path("repl"),
+        .root = b.path("."),
         .files = &(repl_files),
         .flags = &CXX_FLAGS,
     });
 
-    b.installArtifact(exe);
+    if (!release) {
+        b.installArtifact(exe);
 
-    const run_cmd = b.addRunArtifact(exe);
-    run_cmd.step.dependOn(b.getInstallStep());
-    if (b.args) |args| {
-        run_cmd.addArgs(args);
+        const run_cmd = b.addRunArtifact(exe);
+        run_cmd.step.dependOn(b.getInstallStep());
+        if (b.args) |args| {
+            run_cmd.addArgs(args);
+        }
+
+        const run_step = b.step("run-repl", "Run the repl");
+        run_step.dependOn(&run_cmd.step);
     }
-
-    const run_step = b.step("run-repl", "Run the repl");
-    run_step.dependOn(&run_cmd.step);
+    return exe;
 }
+
+const daemon_files = .{
+    "daemon/main.cpp",
+    "daemon/database.cpp",
+    "daemon/transaction.cpp",
+    "daemon/list_database.cpp",
+    "daemon/object.cpp",
+    "daemon/command.cpp",
+    "common/connection.cpp",
+};
 
 fn build_daemon(
     b: *std.Build,
     target: ResolvedTarget,
     optimize: OptimizeMode,
-) void {
+    release: bool,
+) *Compile {
     const exe = b.addExecutable(.{
         .name = "yokai-daemon",
         .target = target,
         .optimize = optimize,
-        .use_llvm = false,
     });
 
     exe.linkLibCpp();
 
-    const daemon_files = .{
-        "main.cpp",
-        "../common/connection.cpp",
-    };
     exe.addCSourceFiles(.{
-        .root = b.path("daemon"),
+        .root = b.path("."),
         .files = &daemon_files,
         .flags = &CXX_FLAGS,
     });
 
-    b.installArtifact(exe);
 
-    const run_cmd = b.addRunArtifact(exe);
-    run_cmd.step.dependOn(b.getInstallStep());
-    if (b.args) |args| {
-        run_cmd.addArgs(args);
+    if (!release) {
+        b.installArtifact(exe);
+        const run_cmd = b.addRunArtifact(exe);
+        run_cmd.step.dependOn(b.getInstallStep());
+        if (b.args) |args| {
+            run_cmd.addArgs(args);
+        }
+
+        const run_step = b.step("run-daemon", "Run the daemon");
+        run_step.dependOn(&run_cmd.step);
     }
-
-    const run_step = b.step("run-daemon", "Run the daemon");
-    run_step.dependOn(&run_cmd.step);
+    return exe;
 }
+
+const test_files = .{
+    "tests/unit/main.cpp",
+    "tests/unit/test_database.cpp",
+    "tests/unit/test_transaction.cpp",
+    "tests/unit/test_command.cpp",
+
+    "daemon/command.cpp",
+    "daemon/database.cpp",
+    "daemon/transaction.cpp",
+    "daemon/list_database.cpp",
+    "daemon/object.cpp",
+};
 
 fn build_tests(
     b: *std.Build,
@@ -102,16 +168,12 @@ fn build_tests(
         .name = "tests",
         .target = target,
         .optimize = optimize,
-        .use_llvm = false,
     });
 
     unit_tests.linkLibCpp();
 
-    const test_files = .{
-        "main.cpp",
-    };
     unit_tests.addCSourceFiles(.{
-        .root = b.path("tests"),
+        .root = b.path("."),
         .files = &test_files,
         .flags = &CXX_FLAGS,
     });
@@ -130,32 +192,44 @@ fn build_tests(
 
 fn build_docs(
     b: *std.Build,
-    target: ResolvedTarget,
-    optimize: OptimizeMode,
 ) void {
-    _ = b;
-    _ = target;
-    _ = optimize;
-    // https://ziglang.org/learn/build-system/#system-tools
-}
+    const args = .{"docs_config"};
 
-fn format_code(
-    b: *std.Build,
-) void {
-    const args = .{
-        "-i",
-        "daemon/main.cpp",
-
-        "repl/main.cpp",
-
-        "common/connection.cpp",
-        "common/include/connection.h",
-
-        "tests/main.cpp",
-    };
-    const tool_run = b.addSystemCommand(&.{"clang-format"});
+    const tool_run = b.addSystemCommand(&.{"doxygen"});
     tool_run.addArgs(&(args));
 
-    const format_step = b.step("format", "Run code formatting");
-    format_step.dependOn(&tool_run.step);
+    const docs_step = b.step("docs", "Generate docs");
+    docs_step.dependOn(&tool_run.step);
+}
+
+const header_files = .{
+    "common/include/connection.h",
+    "daemon/include/object.h",
+    "daemon/include/command.h",
+    "daemon/include/database.h",
+    "daemon/include/list_database.h",
+    "daemon/include/transaction.h",
+};
+
+fn format_code(b: *std.Build, check: bool) void {
+    const files = daemon_files ++ repl_files ++ test_files ++ header_files;
+
+    if (!check) {
+        const flags = .{"-i"};
+        const args = flags ++ files;
+        const tool_run = b.addSystemCommand(&.{"clang-format"});
+        tool_run.addArgs(&(args));
+
+        const format_step = b.step("format", "Run code formatting");
+        format_step.dependOn(&tool_run.step);
+    } else {
+        const flags = .{ "--dry-run", "--Werror" };
+        const args = flags ++ files;
+
+        const tool_run = b.addSystemCommand(&.{"clang-format"});
+        tool_run.addArgs(&(args));
+
+        const format_step = b.step("format", "Run code formatting");
+        format_step.dependOn(&tool_run.step);
+    }
 }

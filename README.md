@@ -33,6 +33,9 @@ zig build run-daemon
 
 # Build and run the tests
 zig build test
+
+# Format code
+zig build format
 ```
 
 If you add a new `.cpp` file to the project make sure you add it to the
@@ -58,3 +61,9 @@ shared behaviour for both `REPL` and `DAEMON`.
 
 ### lib
 **lib** is a directory which includes all library dependencies we need.
+
+## Slides
+https://docs.google.com/presentation/d/1MolV8aGjcaotN-5taekOP0o-n_RqiLxm0NtCeDrRl1U/edit?slide=id.p#slide=id.p
+
+## References
+- https://www.postgresql.org/docs/7.1/mvcc.html

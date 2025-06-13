@@ -1,12 +1,14 @@
-import json 
-from fuzzywuzzy import process  # For fuzzy matching of commands 
-from prompt_toolkit import prompt  # For interactive command-line input
-from prompt_toolkit.completion import Completer, Completion  # For implementing auto-completion logic
-from prompt_toolkit.styles import Style  # To apply custom colors/styles to suggestions
+# For fuzzy matching of commands 
+from fuzzywuzzy import process
 
-# Define color styles for command suggestion types
-COLOR_EXACT = "ansigreen"  # Color for exact command match
-COLOR_FUZZY = "ansiyellow"  # Color for fuzzy/approximate match
+# For implementing auto-completion logic
+from prompt_toolkit.completion import Completer, Completion
+
+# Color for exact command match
+COLOR_EXACT = "ansigreen"
+
+# Color for fuzzy/approximate match
+COLOR_FUZZY = "ansiyellow"
 
 # Define supported commands with their expected syntax
 COMMANDS = {
@@ -36,7 +38,6 @@ class RedisCompleter(Completer):
 
         # Extract command and arguments
         cmd = tokens[0].upper()
-        rest = tokens[1:]
 
         # Handle autocompletion when user has typed only the command
         if len(tokens) == 1:
@@ -58,33 +59,3 @@ class RedisCompleter(Completer):
             if cmd in COMMANDS:
                 args_hint = COMMANDS[cmd]
                 yield Completion(args_hint, style=COLOR_EXACT, start_position=-len(' '.join(tokens)))
-
-# Launch the interactive Redis-style prompt
-def redis_prompt():
-    # Define prompt style for different match types
-    style = Style.from_dict({
-        COLOR_EXACT: 'bold #00ff00',     # Green and bold for exact
-        COLOR_FUZZY: 'italic #ffff00',   # Yellow and italic for fuzzy
-    })
-
-    # Prompt loop
-    while True:
-        try:
-            # Get user input with auto-completion
-            user_input = prompt("redis> ", completer=RedisCompleter(), style=style)
-
-            # Exit condition
-            if user_input.strip().upper() == "EXIT":
-                print("Bye.")
-                break
-            else:
-                # For now, just echo the input (placeholder for actual command execution)
-                print(f"Input: {user_input}")
-
-        # Handle Ctrl+C or Ctrl+D to exit 
-        except (KeyboardInterrupt, EOFError):
-            print("\nBye.")
-            break
-
-if __name__ == "__main__":
-    redis_prompt()
